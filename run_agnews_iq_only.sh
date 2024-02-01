@@ -1,8 +1,11 @@
+#make some directories make sure the program can be ran 
 mkdir -p project/{resources/{cartography_plots,embeddings,indices,mapping,logs/{agnews,trec}},results/{agnews,trec},plots/{agnews,trec}}
+
+# specify the directory which to save the logs
 EXP_PATH=project/resources/logs/agnews
 
 SEEDS=( 398048 127003 259479 869323 570852 )
-FUNCTIONS=( "random" "entropy" "leastconfidence" "bald" "discriminative" "cartography" )
+FUNCTIONS=("iq")
 
 # iterate over seeds
 for rsd_idx in "${!SEEDS[@]}"; do
@@ -11,6 +14,7 @@ for rsd_idx in "${!SEEDS[@]}"; do
     echo "Experiment: '${FUNCTIONS[$enc_idx]}' and random seed ${SEEDS[$rsd_idx]}."
     echo "Training MLP classifer using '${FUNCTIONS[$enc_idx]}' acquisition function and random seed ${SEEDS[$rsd_idx]}."
 
+    # this specifi the directory to save log
     exp_dir=$EXP_PATH/function-${FUNCTIONS[$enc_idx]}-rs${SEEDS[$rsd_idx]}
     python3 main.py --task agnews \
                     --initial_size 1000 \

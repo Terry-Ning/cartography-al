@@ -12,10 +12,11 @@ import torch
 import torch.backends.cudnn
 from dotenv import load_dotenv
 from project.src.active_learning import start_active_learning
-from project.src.plotting.plot_results_from_csv import plot_from_csv
+from project.src.plotting.plot_results_from_csv import plot_from_csv,plot_from_csv_2
 from project.src.significance.check_significance import check_significance
 from project.src.utils.check_overlapping_indices import check_overlap_indices
-from project.src.utils.get_statistics_datamap import get_statistics_datamap
+from project.src.utils.get_statistics_datamap import get_statistics_datamap, get_statistics_datamap_save
+from project.src.utils.plot_statistics import plot_statistics
 from project.src.utils.save_indices_for_overlap import save_indices_for_overlap
 
 load_dotenv(verbose=True)
@@ -57,6 +58,7 @@ if __name__ == "__main__":
     parser.add_argument("--analysis", action="store_true", help="Plot analysis")
     parser.add_argument("--plot_results", action="store_true", help="Plots saved data.")
     parser.add_argument("--plot_dist_results", action="store_true", help="Plots saved data.")
+    parser.add_argument("--plot_statistics", action="store_true", help="Plots statistics.")
     parser.add_argument("--check_indices", action="store_true", help="Checks selected indices.")
     parser.add_argument("--exp_path", nargs="?", type=str, help="Path to experiment logs.")
 
@@ -79,35 +81,46 @@ if __name__ == "__main__":
     parser.add_argument("--plot", action="store_true", help="Plots cartography.")
     parser.add_argument("--histogram", action="store_true", help="Adds density histogram to cartography.")
     parser.add_argument("--significance", action="store_true", help="Checks significance of results.")
+
+    # IQ specific arguments
+    parser.add_argument("--iq", action="store_true", help="Processes iq.")
+    parser.add_argument("--iq_mode", nargs="?", choices=["bi-cls", "regression", "ratio","epi-alea"])
     # Acquisition functions
     parser.add_argument("--acquisition", nargs="?",
-                        choices=["random", "entropy", "leastconfidence", "bald", "cartography", "discriminative"],
+                        choices=["random", "entropy", "leastconfidence", "bald", "cartography", "discriminative","iq"],
                         default="random")
 
     args = parser.parse_args()
 
     if args.plot_results:
-        plot_from_csv(args)
+        plot_from_csv_2(args)
     elif args.check_indices:
         check_overlap_indices(args)
+    elif args.plot_statistics:
+        plot_statistics(args)
     elif args.significance:
         check_significance(args)
     else:
         # setup experiment directory and logging
         setup_experiment(args, args.exp_path)
         results, selected_top_k_runs = [], []
-        confidence_run, variability_run, correctness_run = [], [], []
+        confidence_run, variability_run, correctness_run, aleatoric_run= [], [], [], []
 
         set_seed(args.seed)
+        if args.acquisition == 'iq':
+            logging.info(f"Current args.seed: {args.seed} -- Active Learning process "
+                f"with acquisition function: [iq]  --  mode: {args.iq_mode}")
+
         logging.info(f"Current args.seed: {args.seed} -- Active Learning process "
                      f"with acquisition function: [{args.acquisition}]")
-        accuracy_history, selected_top_k, conf_stats, var_stats, corr_stats = start_active_learning(args)
+        accuracy_history, selected_top_k, conf_stats, var_stats, corr_stats, aleat_stats= start_active_learning(args)
 
         results.append(accuracy_history)
         selected_top_k_runs.append(selected_top_k)
         confidence_run.append(conf_stats)
         variability_run.append(var_stats)
         correctness_run.append(corr_stats)
+        aleatoric_run.append(aleat_stats)
 
         steps = int(os.getenv("ACTIVE_LEARNING_BATCHES"))
         total = steps * len(results[0])
@@ -116,11 +129,17 @@ if __name__ == "__main__":
         if args.analysis:
             print(f"Analysis of {args.acquisition}")
             save_indices_for_overlap(args, total, steps, selected_top_k_runs)
-            get_statistics_datamap(confidence_run, variability_run, correctness_run)
+            get_statistics_datamap_save(args, confidence_run, variability_run, correctness_run, aleatoric_run)
 
         df = pd.DataFrame({"score": [acc for val in results for acc in val],
                            "step": [step for _ in range(len(results)) for step in range(0, total, steps)]})
         logging.info(df)
-        df.to_csv(
-            f"{os.getenv('RESULTS_PATH')}/{args.task}/{args.acquisition}_{args.initial_size}_{args.seed}.csv",
-            sep="\t")
+
+        if args.acquisition == 'iq':
+            df.to_csv(
+                f"{os.getenv('RESULTS_PATH')}/{args.task}/{args.acquisition}-{args.iq_mode}_{args.initial_size}_{args.seed}.csv",
+                sep="\t")            
+        else:
+            df.to_csv(
+                f"{os.getenv('RESULTS_PATH')}/{args.task}/{args.acquisition}_{args.initial_size}_{args.seed}.csv",
+                sep="\t")

@@ -3,10 +3,10 @@
 # Prepare folders for files to go into
 mkdir -p project/{resources/{cartography_plots,embeddings,indices,mapping,logs/{agnews,trec}},results/{agnews,trec},plots/{agnews,trec}}
 
-# Run all acquisition functions for TREC
+# # Run all acquisition functions for TREC
 # run_trec.sh
 
-# Run all acquisition functions for AGNEWS
+# # Run all acquisition functions for AGNEWS
 # run_agnews.sh
 
 # Plots results in a lineplot (Figure 3) -- Warning: can only be run after all acquisition functions have been ran

@@ -55,7 +55,7 @@ class MLPEstimator:
                 batch_x = batch_x.to(DEVICE)
                 batch_y = batch_y.to(DEVICE)
 
-                if self.args.acquisition == "discriminative" or self.args.acquisition == "cartography":
+                if self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq':
                     raw_logits = self.model.forward_discriminative(batch_x)
                     for raw_logit in raw_logits:
                         representations.append(raw_logit.detach().cpu().numpy())
@@ -88,7 +88,7 @@ class MLPEstimator:
             #               f"accuracy: {round(accuracy_score(y_pred, y_gold), 4)}")
         print("\n", end='')
 
-        if self.args.acquisition == "discriminative" or self.args.acquisition == "cartography":
+        if self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq':
             return representations
 
     def predict(self, X_pool: np.ndarray, y_pool: np.ndarray) -> list:
@@ -106,7 +106,7 @@ class MLPEstimator:
                     raw_logits_stacked = torch.stack(raw_logits_list).mean(dim=0).to(DEVICE)
                     probas.extend(self.model.predict_proba(raw_logits_stacked))
 
-                elif self.args.acquisition == "discriminative" or self.args.acquisition == "cartography":
+                elif self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq':
                     raw_logits = self.model.forward_discriminative(batch_x)
                     probas.extend(raw_logits.detach().cpu().numpy())
 
