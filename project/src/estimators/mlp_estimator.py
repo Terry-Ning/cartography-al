@@ -36,7 +36,7 @@ class MLP(nn.Module):
 
     def forward(self, x) -> torch.Tensor:
         embeds = torch.sum(self.embedding(x), dim=1)
-        out_fc1 = F.relu(self.fc1(embeds))
+        out_fc1 = F.relu(self.fc1(embeds))  
 
         if self.args.acquisition == "bald":
             out = F.dropout(out_fc1, p=float(os.getenv("DROPOUT")), training=True)

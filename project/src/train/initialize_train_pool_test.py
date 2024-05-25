@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 def data2feats(args: argparse.Namespace, sent: str, label: str, word_to_idx: Dict,
                label_to_idx: Dict) -> Tuple[Any, Any]:
+    
+    # replace every word with the idx
     sent = sent.split()
     if args.task == "trec":
         feat = np.zeros([int(os.getenv("MAX_LEN_TREC"))], dtype=np.int64)

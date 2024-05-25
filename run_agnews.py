@@ -14,15 +14,15 @@ import os
 # os.makedirs("project/plots/trec", exist_ok=True)
 
 # Specify the directory to save the logs
-exp_path = "project/resources/logs/trec"
+exp_path = "project/resources/logs/agnews"
 
 seeds = [398048, 127003, 259479, 869323, 570852]
-# seeds = [777777]
-# functions = ["random" ,"entropy" ,"leastconfidence" ,"bald" ,"discriminative" ,"cartography", "iq"]
-functions = ["epistemic"]
-# modes = ['bi-cls',"regression","ratio","epi-alea"]
-# modes = ['epi-add-alea','x-largest-alea']
-# modes = ["regression"]
+# seeds = [333333]
+# functions = ["random" ,"entropy" ,"leastconfidence" ,"bald" ,"discriminative" ,"cartography"]
+functions = ["aleatoric","epi-add-alea"]
+# modes = ['bi-cls',"regression",'ratio']
+# modes = ['epi-alea','epi-add-alea','x-largest-alea']
+# modes = ['x-largest-alea']
 
 # Iterate over seeds and functions
 for seed in seeds:
@@ -34,7 +34,7 @@ for seed in seeds:
 
                 exp_dir = f"{exp_path}/function-{function}-rs{seed}-mode:{mode}"
                 command = [
-                    "python3", "main.py", "--task", "trec",
+                    "python3", "main.py", "--task", "agnews",
                     "--initial_size", "1000",
                     "--batch_size", "64",
                     "--learning_rate_main", "0.0001",
@@ -57,7 +57,7 @@ for seed in seeds:
 
             exp_dir = f"{exp_path}/function-{function}-rs{seed}"
             command = [
-                "python3", "main.py", "--task", "trec",
+                "python3", "main.py", "--task", "agnews",
                 "--initial_size", "1000",
                 "--batch_size", "64",
                 "--learning_rate_main", "0.0001",
@@ -73,5 +73,6 @@ for seed in seeds:
             ]
             
             subprocess.run(command)
+
 # Additional command (if needed)
 # subprocess.run(["python3", "main.py", "--task", "trec", "--initial_size", "500", "--plot_results"])

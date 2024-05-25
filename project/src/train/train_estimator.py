@@ -55,12 +55,13 @@ class MLPEstimator:
                 batch_x = batch_x.to(DEVICE)
                 batch_y = batch_y.to(DEVICE)
 
-                if self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq':
-                    raw_logits = self.model.forward_discriminative(batch_x)
-                    for raw_logit in raw_logits:
-                        representations.append(raw_logit.detach().cpu().numpy())
+                if self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq' or self.args.acquisition == 'epistemic'or self.args.acquisition == 'aleatoric' or self.args.acquisition == 'epi-add-alea':
+                    if epoch == self.args.epochs - 1:
+                        raw_logits = self.model.forward_discriminative(batch_x)  # this is different function from te 'forward' but influenced by the parameter of model, it's just the represents of the layer2
+                        for raw_logit in raw_logits:
+                            representations.append(raw_logit.detach().cpu().numpy())
 
-                raw_logits = self.model.forward(batch_x)
+                raw_logits = self.model.forward(batch_x)  # this is the log probabilities after log softmax
                 predictions = self.model.predict_class(raw_logits)
 
                 y_pred.extend(predictions)
@@ -78,7 +79,7 @@ class MLPEstimator:
                 loss = self.criterion(raw_logits, batch_y)
                 loss.backward()
 
-                self.optimizer.step()
+                self.optimizer.step()  #update the model parameter
                 epoch_loss += loss
 
             sys.stdout.write(f"\rMain Classifier: Epoch {epoch}, train loss: {epoch_loss / len(y_gold):.4f}"
@@ -88,7 +89,7 @@ class MLPEstimator:
             #               f"accuracy: {round(accuracy_score(y_pred, y_gold), 4)}")
         print("\n", end='')
 
-        if self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq':
+        if self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq' or self.args.acquisition == 'epistemic'or self.args.acquisition == 'aleatoric' or self.args.acquisition == 'epi-add-alea':
             return representations
 
     def predict(self, X_pool: np.ndarray, y_pool: np.ndarray) -> list:
@@ -106,7 +107,7 @@ class MLPEstimator:
                     raw_logits_stacked = torch.stack(raw_logits_list).mean(dim=0).to(DEVICE)
                     probas.extend(self.model.predict_proba(raw_logits_stacked))
 
-                elif self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq':
+                elif self.args.acquisition == "discriminative" or self.args.acquisition == "cartography" or self.args.acquisition == 'iq' or self.args.acquisition == 'epistemic' or self.args.acquisition == 'aleatoric' or self.args.acquisition == 'epi-add-alea':
                     raw_logits = self.model.forward_discriminative(batch_x)
                     probas.extend(raw_logits.detach().cpu().numpy())
 

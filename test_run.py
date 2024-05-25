@@ -19,9 +19,10 @@ exp_path = "project/resources/logs/agnews"
 seeds = [398048, 127003, 259479, 869323, 570852]
 # seeds = [333333]
 # functions = ["random" ,"entropy" ,"leastconfidence" ,"bald" ,"discriminative" ,"cartography"]
-functions = ["iq"]
+functions = ["epistemic"]
 # modes = ['bi-cls',"regression",'ratio']
-modes = ['epi-alea']
+# modes = ['epi-alea','epi-add-alea','x-largest-alea']
+# modes = ['x-largest-alea']
 
 # Iterate over seeds and functions
 for seed in seeds:

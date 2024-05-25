@@ -5,6 +5,7 @@ import os
 import sys
 import time
 from collections import defaultdict, Counter
+from sklearn.discriminant_analysis import StandardScaler
 
 from sklearn.ensemble import RandomForestRegressor
 
@@ -27,7 +28,7 @@ from project.src.utils.get_vocab_and_labels import get_vector_matrix, get_vocab_
 from project.src.utils.get_weight_distribution import get_distribution_weights, get_distribution_weights_iq
 from project.src.utils.remove_pool_add_train import add_and_remove_instances
 from project.src.utils.save_cartography import save_cartography
-from project.src.train.generate_iq import generate_iq, prepare_data_for_iqal_ratio,prepare_data_for_iqal_regression
+from project.src.train.generate_iq import generate_iq, prepare_data_for_epi_regression, prepare_data_for_iqal_ratio,prepare_data_for_iqal_regression
 
 from xgboost import XGBRegressor
 
@@ -44,7 +45,7 @@ def reset_estimator(estimator) -> None:
 def start_active_learning(args: argparse.Namespace) -> tuple:
     logger.info("{:30} {:25} {:30}".format("-" * 25, "Initializing Data", "-" * 25))
 
-    train, test = check_and_get_data(args)
+    train, test = check_and_get_data(args)  # raw data, just some txt
     word_to_idx, label_to_idx, vocab_size, num_labels = get_vocab_and_label(train, test)
     train, pool = split_data(train, args.initial_size)
     embedding_matrix = get_vector_matrix(args, word_to_idx)
@@ -53,10 +54,10 @@ def start_active_learning(args: argparse.Namespace) -> tuple:
     logging.info(f"Vocabulary size: {vocab_size}, "
                  f"number of labels: {num_labels}")
     if args.pretrained:
-        logging.info(f"pretrained embedding size: {embedding_matrix.shape}")
+        logging.info(f"pretrained embedding size: {embedding_matrix.shape}")  # the first dimension of size is the same as the vocabulary size
 
     X_train, y_train, X_pool, y_pool, X_test, y_test = initialize_train_pool_test(args, train, pool, test, word_to_idx,
-                                                                                  label_to_idx)
+                                                                                  label_to_idx) # every sentence are placed with a sequence of word idx
 
     logging.info(f"Initial Instances Train: {json.dumps(dict(sorted(Counter(y_train.tolist()).items())), indent=4)}")
 
@@ -100,7 +101,7 @@ def start_active_learning(args: argparse.Namespace) -> tuple:
             active_learning_accuracy_history.append(accuracy)
 
 
-        if args.acquisition == "discriminative" or args.acquisition == "cartography" or args.acquisition == 'iq':
+        if args.acquisition == "discriminative" or args.acquisition == "cartography" or args.acquisition == 'iq' or args.acquisition == 'epistemic' or args.acquisition == 'aleatoric' or args.acquisition == 'epi-add-alea':
             # prepare representations and data for DAL
             X_pool_rep = estimator.predict(X_pool, y_pool)
 
@@ -121,6 +122,41 @@ def start_active_learning(args: argparse.Namespace) -> tuple:
                 cal_estimator.train(X_train_cal, y_train_cal)
                 top_k_indices = cal_estimator.predict(X_pool_cal, y_pool_cal)
                 cal_estimator.weight_reset()
+            
+            elif args.acquisition == "epistemic":
+                    model = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+                    X_train_r, y_train_r, X_pool_r = prepare_data_for_epi_regression(X_train_rep,X_pool_rep,estimator.probabilities)
+                    model.fit(X_train_r, y_train_r)
+                    y_pool_rs = model.predict(X_pool_r)
+                    num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))
+                    top_k_indices = np.argsort(y_pool_rs)[-num:].tolist()
+
+            elif args.acquisition == "aleatoric":
+                    model = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+                    X_train_r, y_train_r, X_pool_r = prepare_data_for_iqal_regression(X_train_rep,X_pool_rep,estimator.probabilities)
+                    model.fit(X_train_r, y_train_r)
+                    y_pool_rs = model.predict(X_pool_r)
+                    num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))
+                    top_k_indices = np.argsort(y_pool_rs)[-num:].tolist()
+
+            elif args.acquisition == "epi-add-alea":
+                    xgb_reg_al = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+                    xgb_reg_ep = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+                    X_train_iq_r, y_train_iq_r_al, y_train_iq_r_ep, X_pool_iq_r = prepare_data_for_iqal_ratio(X_train_rep,X_pool_rep,estimator.probabilities)
+                    xgb_reg_al.fit(X_train_iq_r, y_train_iq_r_al)
+                    xgb_reg_ep.fit(X_train_iq_r, y_train_iq_r_ep)
+                    y_pool_iq_al = xgb_reg_al.predict(X_pool_iq_r)
+                    y_pool_iq_ep = xgb_reg_ep.predict(X_pool_iq_r)
+                    scaler = StandardScaler()
+                    # Reshape data for scaling
+                    y_pool_iq_ep_scaled = scaler.fit_transform(y_pool_iq_ep.reshape(-1, 1)).flatten()
+                    y_pool_iq_al_scaled = scaler.fit_transform(y_pool_iq_al.reshape(-1, 1)).flatten()
+                    # Combine the scaled uncertainties
+                    y_pool_iq_ep_al_scaled_combined = y_pool_iq_ep_scaled + y_pool_iq_al_scaled
+
+                    # Select instances based on the combined scaled uncertainties
+                    num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))  # Defaulting to 50 if the environment variable is not set
+                    top_k_indices = np.argsort(y_pool_iq_ep_al_scaled_combined)[-num:].tolist()
 
             elif args.acquisition == 'iq':
                 if args.iq_mode == 'regression':
@@ -147,6 +183,51 @@ def start_active_learning(args: argparse.Namespace) -> tuple:
                     num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))
                     top_k_indices = np.argsort(y_pool_iq_ratio)[:num].tolist()
 
+                elif args.iq_mode == 'x-largest-alea':
+                    xgb_reg_al = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+                    xgb_reg_ep = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+                    X_train_iq_r, y_train_iq_r_al, y_train_iq_r_ep, X_pool_iq_r = prepare_data_for_iqal_ratio(X_train_rep,X_pool_rep,estimator.probabilities)
+                    xgb_reg_al.fit(X_train_iq_r, y_train_iq_r_al)
+                    xgb_reg_ep.fit(X_train_iq_r, y_train_iq_r_ep)
+                    y_pool_iq_al = xgb_reg_al.predict(X_pool_iq_r)
+                    y_pool_iq_ep = xgb_reg_ep.predict(X_pool_iq_r)
+                    top_k_indices = []
+                    num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))
+                    while len(top_k_indices) < num:
+                        ep_index = np.argmax(y_pool_iq_ep)
+                        al_index = np.argmax(y_pool_iq_al)
+                        if ep_index != al_index:
+                            top_k_indices.append(int(ep_index))
+                            y_pool_iq_ep[ep_index] = -np.inf
+                        else:
+                            y_pool_iq_ep[ep_index] = -np.inf
+                        
+                        if np.all(y_pool_iq_ep == -np.inf):
+                            print("Ran out of instances to select based on the criteria before reaching desired number.")
+                            break
+
+                elif args.iq_mode == 'epi-add-alea':
+                    xgb_reg_al = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+                    xgb_reg_ep = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+                    X_train_iq_r, y_train_iq_r_al, y_train_iq_r_ep, X_pool_iq_r = prepare_data_for_iqal_ratio(X_train_rep,X_pool_rep,estimator.probabilities)
+                    xgb_reg_al.fit(X_train_iq_r, y_train_iq_r_al)
+                    xgb_reg_ep.fit(X_train_iq_r, y_train_iq_r_ep)
+                    y_pool_iq_al = xgb_reg_al.predict(X_pool_iq_r)
+                    y_pool_iq_ep = xgb_reg_ep.predict(X_pool_iq_r)
+                    scaler = StandardScaler()
+                    # Reshape data for scaling
+                    y_pool_iq_ep_scaled = scaler.fit_transform(y_pool_iq_ep.reshape(-1, 1)).flatten()
+                    y_pool_iq_al_scaled = scaler.fit_transform(y_pool_iq_al.reshape(-1, 1)).flatten()
+                    # Combine the scaled uncertainties
+                    y_pool_iq_ep_al_scaled_combined = y_pool_iq_ep_scaled + y_pool_iq_al_scaled
+
+                    # Select instances based on the combined scaled uncertainties
+                    num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))  # Defaulting to 50 if the environment variable is not set
+                    top_k_indices = np.argsort(y_pool_iq_ep_al_scaled_combined)[-num:].tolist()
+
+
+
+
                 elif args.iq_mode == 'epi-alea':
                     # Initialize two XGBoost regressors
                     xgb_reg_al = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
@@ -155,16 +236,51 @@ def start_active_learning(args: argparse.Namespace) -> tuple:
                     xgb_reg_al.fit(X_train_iq_r, y_train_iq_r_al)
                     xgb_reg_ep.fit(X_train_iq_r, y_train_iq_r_ep)
                     y_pool_iq_al = xgb_reg_al.predict(X_pool_iq_r)
-                    y_pool_iq_ep = xgb_reg_ep.predict(X_pool_iq_r)
+                    y_pool_iq_ep = xgb_reg_ep.predict(X_pool_iq_r)  
+
+                    if os.getenv("EPI_ALEA_CHECK") == 'true':
+                        # Step 1: Identify duplicates in y_pool_iq_ep
+                        duplicates = defaultdict(list)  # To store indices of duplicates in y_pool_iq_ep
+                        for index, value in enumerate(y_pool_iq_ep):
+                            duplicates[value].append(index)
+
+                        # Filtering out the entries with no duplicates
+                        duplicates = {key: val for key, val in duplicates.items() if len(val) > 1}
+
+                        # Step 2: Map indices to y_pool_iq_al values
+                        duplicate_values_al = defaultdict(list)
+                        for ep_value, indices in duplicates.items():
+                            for index in indices:
+                                al_value = y_pool_iq_al[index]
+                                duplicate_values_al[ep_value].append((index, al_value))
+
+                        
+                        logger.info(f"Dictonray of same epistemic and index: {duplicates}")
+                        logger.info(f"Dictonray of same epistemic and index,its different aleatoric: {duplicate_values_al}")
+
+                        num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))
+                        # Creating a list of tuples combining both criteria
+                        combined_list = [(y_pool_iq_ep[i], -y_pool_iq_al[i]) for i in range(len(y_pool_iq_ep))]
+
+                        # Sorting the indices based on the combined criteria
+                        # Using 'sorted' with a custom key for sorting and then extracting indices
+                        top_k_indices = sorted(range(len(combined_list)), key=lambda i: combined_list[i], reverse=True)[:num]
+
+                        idx_dupli = [i for i in top_k_indices if any(i in indices for indices in duplicates.values())]
+
+                        # Logging the overlap information
+                        logger.info(f"Indices in top_k_indices that have duplicates in y_pool_iq_ep: {idx_dupli}")
 
 
-                    num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))
-                    # Creating a list of tuples combining both criteria
-                    combined_list = [(y_pool_iq_ep[i], -y_pool_iq_al[i]) for i in range(len(y_pool_iq_ep))]
+                    else:   
 
-                    # Sorting the indices based on the combined criteria
-                    # Using 'sorted' with a custom key for sorting and then extracting indices
-                    top_k_indices = sorted(range(len(combined_list)), key=lambda i: combined_list[i], reverse=True)[:num]
+                        num = int(os.getenv('ACTIVE_LEARNING_BATCHES'))
+                        # Creating a list of tuples combining both criteria
+                        combined_list = [(y_pool_iq_ep[i], -y_pool_iq_al[i]) for i in range(len(y_pool_iq_ep))]
+
+                        # Sorting the indices based on the combined criteria
+                        # Using 'sorted' with a custom key for sorting and then extracting indices
+                        top_k_indices = sorted(range(len(combined_list)), key=lambda i: combined_list[i], reverse=True)[:num]
 
 
                 elif args.iq_mode == 'bi-cls':

@@ -46,6 +46,25 @@ def prepare_data_for_iqal_regression(X_train_rep,X_pool_rep,probabilities):
 
     return X_train , y_train, X_pool
 
+def prepare_data_for_epi_regression(X_train_rep,X_pool_rep,probabilities):
+
+    X_train, y_train = [], []
+
+
+    variability = {idx: np.std(proba) for idx, proba in list(probabilities.items())}
+
+
+
+    for key, value in variability.items():
+        X_train.append(X_train_rep[int(key)])
+        y_train.append(value)
+
+    X_pool = np.array(X_pool_rep)
+    X_train, y_train = np.array(X_train), np.array(y_train)
+
+
+    return X_train , y_train, X_pool
+
 def prepare_data_for_iqal_ratio(X_train_rep,X_pool_rep,probabilities):
 
     X_train, y_train_al, y_train_ep = [], [],[]

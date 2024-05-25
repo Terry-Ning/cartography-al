@@ -12,11 +12,11 @@ import torch
 import torch.backends.cudnn
 from dotenv import load_dotenv
 from project.src.active_learning import start_active_learning
-from project.src.plotting.plot_results_from_csv import plot_from_csv,plot_from_csv_2
+from project.src.plotting.plot_results_from_csv import generate_pdf_table_from_csv, plot_from_csv,plot_from_csv_2, plot_from_csv_3, plot_from_csv_4, plot_from_csv_part
 from project.src.significance.check_significance import check_significance
 from project.src.utils.check_overlapping_indices import check_overlap_indices
 from project.src.utils.get_statistics_datamap import get_statistics_datamap, get_statistics_datamap_save
-from project.src.utils.plot_statistics import plot_statistics
+from project.src.utils.plot_statistics import plot_statistics, plot_statistics2
 from project.src.utils.save_indices_for_overlap import save_indices_for_overlap
 
 load_dotenv(verbose=True)
@@ -57,6 +57,7 @@ if __name__ == "__main__":
     parser.add_argument("--task", required=True, nargs="?", choices=["trec", "agnews"])
     parser.add_argument("--analysis", action="store_true", help="Plot analysis")
     parser.add_argument("--plot_results", action="store_true", help="Plots saved data.")
+    parser.add_argument("--plot_tables", action="store_true", help="Plots tables for saved data.")
     parser.add_argument("--plot_dist_results", action="store_true", help="Plots saved data.")
     parser.add_argument("--plot_statistics", action="store_true", help="Plots statistics.")
     parser.add_argument("--check_indices", action="store_true", help="Checks selected indices.")
@@ -84,20 +85,23 @@ if __name__ == "__main__":
 
     # IQ specific arguments
     parser.add_argument("--iq", action="store_true", help="Processes iq.")
-    parser.add_argument("--iq_mode", nargs="?", choices=["bi-cls", "regression", "ratio","epi-alea"])
+    parser.add_argument("--iq_mode", nargs="?", choices=["bi-cls", "regression", "ratio","epi-alea","x-largest-alea","epi-add-alea"])
     # Acquisition functions
     parser.add_argument("--acquisition", nargs="?",
-                        choices=["random", "entropy", "leastconfidence", "bald", "cartography", "discriminative","iq"],
+                        choices=["random", "entropy", "leastconfidence", "bald", "cartography", "discriminative","iq","epistemic","aleatoric","epi-add-alea"],
                         default="random")
 
     args = parser.parse_args()
 
     if args.plot_results:
-        plot_from_csv_2(args)
+        # plot_from_csv_4(args)
+        plot_from_csv_part(args)
+    elif args.plot_tables:
+        generate_pdf_table_from_csv(args)
     elif args.check_indices:
         check_overlap_indices(args)
     elif args.plot_statistics:
-        plot_statistics(args)
+        plot_statistics2(args)
     elif args.significance:
         check_significance(args)
     else:

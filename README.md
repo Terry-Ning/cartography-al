@@ -1,5 +1,5 @@
-# Cartography Active Learning
-
+# Explore novel Active learning based on epistemic uncertainty and aleatoric uncertainty (Modified from Cartography Active Learning)
+## Also for NLP course final project
 This repository contains the code and data for the paper:
 
 Mike Zhang and Barbara Plank. 2021. [**Cartography Active Learning**](https://aclanthology.org/2021.findings-emnlp.36v2.pdf). In Findings of the Association for Computational Linguistics: EMNLP 2021.
